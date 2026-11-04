@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 	"net/http"
 	"encoding/json"
 
@@ -54,21 +55,41 @@ func webhook(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // заполняем модель ответа
-    resp := models.Response{
-        Response: models.ResponsePayload{
-            Text: "Извините, я пока ничего не умею",
-        },
-        Version: "1.0",
-    }
+    text := "Для вас нет новых сообщений."
 
-    w.Header().Set("Content-Type", "application/json")
+    // первый запрос новой сессии
+        if req.Session.New {
+            // обрабатываем поле Timezone запроса
+            tz, err := time.LoadLocation(req.Timezone)
+            if err != nil {
+                logger.Log.Debug("cannot parse timezone")
+                w.WriteHeader(http.StatusBadRequest)
+                return
+            }
 
-    // сериализуем ответ сервера
-    enc := json.NewEncoder(w)
-    if err := enc.Encode(resp); err != nil {
-        logger.Log.Debug("error encoding response", zap.Error(err))
-        return
-    }
-    logger.Log.Debug("sending HTTP 200 response")
+            // получаем текущее время в часовом поясе пользователя
+            now := time.Now().In(tz)
+            hour, minute, _ := now.Clock()
+
+            // формируем текст ответа
+            text = fmt.Sprintf("Точное время %d часов, %d минут. %s", hour, minute, text)
+        }
+
+        // заполняем модель ответа
+        resp := models.Response{
+          Response: models.ResponsePayload{
+            Text: text, // Алиса проговорит новый текст
+          },
+          Version: "1.0",
+        }
+
+        w.Header().Set("Content-Type", "application/json")
+
+        // сериализуем ответ сервера
+        enc := json.NewEncoder(w)
+        if err := enc.Encode(resp); err != nil {
+          logger.Log.Debug("error encoding response", zap.Error(err))
+          return
+        }
+        logger.Log.Debug("sending HTTP 200 response")
 }
